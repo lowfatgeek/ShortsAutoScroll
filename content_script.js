@@ -22,6 +22,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleNextVideo(message.method, sendResponse);
       return true;
 
+    case 'CHECK_SPONSORED':
+      handleCheckSponsored(sendResponse);
+      return true;
+
     default:
       sendResponse({ error: 'Unknown message type' });
       return false;
@@ -311,6 +315,60 @@ function getFallbackMethod(currentMethod) {
 // Sleep utility
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Handle check sponsored
+function handleCheckSponsored(sendResponse) {
+  try {
+    const isSponsored = checkIfSponsored();
+    console.log('Sponsored check result:', isSponsored);
+    sendResponse({ isSponsored: isSponsored });
+  } catch (error) {
+    console.error('Error checking sponsored:', error);
+    sendResponse({ isSponsored: false, error: error.message });
+  }
+}
+
+// Check if current video is sponsored/ad
+function checkIfSponsored() {
+  // Look for "Sponsored" text in various locations
+  const sponsoredSelectors = [
+    // Common sponsored indicators
+    '[class*="badge"]',
+    '[class*="sponsor"]',
+    '[class*="ad-badge"]',
+    '.ytd-ad-slot-renderer',
+    '#player-overlay',
+    '.ytp-ad-module',
+    '#shorts-player'
+  ];
+
+  // Check text content for "Sponsored"
+  const pageText = document.body.innerText;
+  if (pageText.includes('Sponsored')) {
+    console.log('Found "Sponsored" text on page');
+    return true;
+  }
+
+  // Check specific elements that might contain sponsored indicator
+  for (const selector of sponsoredSelectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const el of elements) {
+      if (el.textContent && el.textContent.includes('Sponsored')) {
+        console.log('Found "Sponsored" in element:', selector);
+        return true;
+      }
+    }
+  }
+
+  // Check for ad overlay or ad player elements
+  const adIndicators = document.querySelectorAll('.ytp-ad-player-overlay, .ytp-ad-text, .ad-showing');
+  if (adIndicators.length > 0) {
+    console.log('Found ad indicator elements');
+    return true;
+  }
+
+  return false;
 }
 
 // Notify that content script is ready

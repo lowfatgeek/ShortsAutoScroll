@@ -227,8 +227,68 @@ async function processNextVideo() {
     return;
   }
 
-  // Step B: Wait countdown
+  // Check if current video is sponsored - skip immediately if so
+  const isSponsored = await checkIfSponsored();
+  if (isSponsored) {
+    addLog('⊘ Sponsored video detected, skipping...');
+    await skipToNextVideo();
+    return;
+  }
+
+  // Step B: Wait countdown (only for non-sponsored videos)
   await startCountdown();
+}
+
+// Check if current video is sponsored
+async function checkIfSponsored() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab || !tab.id) {
+      return false;
+    }
+
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'CHECK_SPONSORED' });
+    return response && response.isSponsored;
+  } catch (error) {
+    console.error('Error checking sponsored:', error);
+    return false;
+  }
+}
+
+// Skip to next video (for sponsored content)
+async function skipToNextVideo() {
+  if (!runState.isRunning) return;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab || !tab.id) {
+      addLog('Error: Tab not found');
+      await handleStopRun();
+      return;
+    }
+
+    // Navigate to next video directly without waiting or liking
+    const navSuccess = await navigateToNext(tab.id);
+
+    if (!navSuccess) {
+      addLog('Navigation failed after retries');
+      await handleStopRun();
+      return;
+    }
+
+    // Don't increment counter for skipped sponsored videos
+    runState.navigationRetries = 0;
+    await saveState();
+
+    // Continue processing (will check if next video is also sponsored)
+    await processNextVideo();
+  } catch (error) {
+    console.error('Error skipping sponsored video:', error);
+    addLog(`Error: ${error.message}`);
+    await handleStopRun();
+  }
 }
 
 // Start countdown timer

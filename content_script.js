@@ -56,7 +56,17 @@ function injectVisibilitySpoofer() {
       e.stopImmediatePropagation();
     }, true);
     
-    console.log('[Shorts Auto Scroller] Visibility API spoofer activated');
+    // Monkey-patch requestAnimationFrame to work in background
+    const originalRAF = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      return setTimeout(() => callback(performance.now()), 16);
+    };
+    
+    window.cancelAnimationFrame = (id) => {
+      clearTimeout(id);
+    };
+    
+    console.log('[Shorts Auto Scroller] Visibility API & RAF spoofer activated');
   `;
   (document.head || document.documentElement).appendChild(script);
   script.remove();
@@ -227,11 +237,13 @@ function isElementVisible(element) {
 // Handle navigation to next video
 async function handleNextVideo(method, sendResponse) {
   try {
-    const currentVideoId = extractVideoId();
-    const result = await navigateToNext(method, currentVideoId);
-    sendResponse(result);
+    // Start navigation but don't wait for it to finish
+    // We return 'true' immediately to acknowledge the command
+    // The service worker will verify the URL change
+    navigateToNext(method, extractVideoId());
+    sendResponse({ ok: true });
   } catch (error) {
-    console.error('Error navigating:', error);
+    console.error('Error executing navigation:', error);
     sendResponse({ ok: false, error: error.message });
   }
 }
@@ -346,13 +358,33 @@ async function navigateByKeyboard() {
 // Navigate by wheel scroll
 async function navigateByScroll() {
   try {
-    // Scroll by viewport height
+    console.log('Attempting scroll navigation...');
+    const windowH = window.innerHeight;
+
+    // Strategy 1: Window scroll (standard)
     window.scrollBy({
-      top: window.innerHeight,
-      behavior: 'smooth'
+      top: windowH,
+      behavior: 'auto'
     });
 
-    console.log('Scrolled by viewport height');
+    // Strategy 2: Target specific Shorts containers
+    // Sometimes the window scroll doesn't affect the shorts container directly
+    const containers = [
+      document.getElementById('shorts-container'),
+      document.getElementById('shorts-inner-container'),
+      document.querySelector('ytd-shorts')
+    ];
+
+    for (const container of containers) {
+      if (container) {
+        container.scrollBy({
+          top: windowH,
+          behavior: 'auto'
+        });
+      }
+    }
+
+    console.log('Executed scroll commands');
     return true;
   } catch (error) {
     console.error('Error scrolling:', error);

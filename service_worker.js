@@ -455,44 +455,105 @@ async function likeCurrentVideo(tabId) {
 }
 
 // Navigate to next video
-async function navigateToNext(tabId) {
-  let method = runState.settings.navigationMethod;
+async function navigateToNext(tabId, forcedMethod = null) {
+  let method = forcedMethod || runState.settings.navigationMethod;
 
-  // If RANDOM, pick a random method
-  if (method === 'RANDOM') {
+  // If RANDOM, pick a random method (unless forced)
+  if (!forcedMethod && method === 'RANDOM') {
     const methods = ['CLICK_DOWN', 'KEYBOARD_ARROW', 'WHEEL_SCROLL'];
     method = methods[Math.floor(Math.random() * methods.length)];
     console.log('Random navigation method selected:', method);
   }
 
+  // capture current video ID for comparison
+  const currentVideoId = runState.lastVideoId;
+
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: 'NEXT_VIDEO',
-      method: method
-    });
+    // FIRE AND FORGET STRATEGY
+    // We send the command with a short timeout. If it times out, we assume 
+    // the script received it but is just slow to respond (common in background).
+    // We then verify by polling the URL ourselves.
+    try {
+      await sendMessageWithTimeout(tabId, {
+        type: 'NEXT_VIDEO',
+        method: method
+      }, 2000); // Short 2s timeout
+      debugLog('Navigation command acknowledged');
+    } catch (e) {
+      debugLog('Navigation command timed out (ignoring, will verify via URL)');
+    }
 
-    if (response.ok && response.newVideoId) {
-      addLog('→ Next video');
-      runState.lastVideoId = response.newVideoId;
-      return true;
-    } else {
-      // Navigation failed
-      runState.navigationRetries++;
+    // VERIFICATION LOOP
+    // Poll for URL change for up to 10 seconds
+    const maxWait = 10000;
+    const interval = 1000;
+    let startTime = Date.now();
 
-      if (runState.navigationRetries < 2) {
-        addLog('Navigation failed, retrying...');
-        await sleep(2000);
-        return navigateToNext(tabId);
-      } else {
-        addLog('Navigation failed after retries');
-        return false;
+    while (Date.now() - startTime < maxWait) {
+      await sleep(interval);
+
+      const tab = await chrome.tabs.get(tabId);
+      const newVideoId = extractVideoIdFromUrl(tab.url);
+
+      if (newVideoId && newVideoId !== currentVideoId) {
+        addLog('→ Next video');
+        runState.lastVideoId = newVideoId;
+        return true;
       }
     }
+
+    // If we get here, navigation failed
+    addLog('Navigation verification failed (URL did not change)');
+    runState.navigationRetries++;
+
+    if (runState.navigationRetries < 2) {
+      // SMART FALLBACK: If first method failed, force SCROLL on retry
+      // This helps when Keyboard events are blocked in background
+      const retryMethod = 'WHEEL_SCROLL';
+      addLog(`Retrying with ${retryMethod}...`);
+      return navigateToNext(tabId, retryMethod);
+    } else {
+      return false;
+    }
+
   } catch (error) {
     console.error('Error navigating:', error);
     addLog(`Navigation error: ${error.message}`);
     return false;
   }
+}
+
+// Helper: Extract Video ID from URL string
+function extractVideoIdFromUrl(url) {
+  if (!url) return null;
+  const match = url.match(/\/shorts\/([^/?]+)/);
+  return match ? match[1] : null;
+}
+
+// Helper: Send message with timeout
+function sendMessageWithTimeout(tabId, message, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      reject(new Error('Message response timed out'));
+    }, timeout);
+
+    chrome.tabs.sendMessage(tabId, message)
+      .then(response => {
+        if (!timedOut) {
+          clearTimeout(timer);
+          resolve(response);
+        }
+      })
+      .catch(error => {
+        if (!timedOut) {
+          clearTimeout(timer);
+          reject(error);
+        }
+      });
+  });
 }
 
 // Random integer generator (inclusive)

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Shorts Scroller</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>Auto Shorts Scroller</h1>
+    </header>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer" id="disclaimer">
+      <p><strong>⚠️ Disclaimer:</strong> This extension automates interactions with YouTube that may violate YouTube's Terms of Service. Use at your own risk. You accept full responsibility for any consequences, including account restrictions or bans.</p>
+      <button id="acceptDisclaimer">I Understand</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="mainContent" style="display: none;">
+      <!-- Detection Status -->
+      <div class="detection-status" id="detectionStatus">
+        <span class="status-icon" id="statusIcon">⏳</span>
+        <span class="status-text" id="statusText">Checking...</span>
+      </div>
+
+      <!-- Settings Form -->
+      <div class="settings-section">
+        <h2>Settings</h2>
+        
+        <div class="form-group">
+          <label for="targetCount">Target Videos:</label>
+          <input type="number" id="targetCount" min="1" value="20">
+        </div>
+
+        <div class="form-group">
+          <label for="waitMin">Wait Min (seconds):</label>
+          <input type="number" id="waitMin" min="1" value="15">
+        </div>
+
+        <div class="form-group">
+          <label for="waitMax">Wait Max (seconds):</label>
+          <input type="number" id="waitMax" min="1" value="30">
+        </div>
+
+        <div class="form-group">
+          <label for="navigationMethod">Navigation Method:</label>
+          <select id="navigationMethod">
+            <option value="CLICK_DOWN">Click Down Button</option>
+            <option value="KEYBOARD_ARROW">Keyboard Arrow Down</option>
+            <option value="WHEEL_SCROLL">Wheel Scroll</option>
+          </select>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="skipAlreadyLiked" checked>
+          <label for="skipAlreadyLiked">Skip already liked videos</label>
+        </div>
+      </div>
+
+      <!-- Control Buttons -->
+      <div class="controls">
+        <button id="startBtn" class="btn btn-start" disabled>Start</button>
+        <button id="stopBtn" class="btn btn-stop" disabled>Stop</button>
+      </div>
+
+      <!-- Progress Section -->
+      <div class="progress-section">
+        <div class="progress-info">
+          <span class="label">Progress:</span>
+          <span id="progressText">0 / 20</span>
+        </div>
+        <div class="countdown-info">
+          <span class="label">Next action in:</span>
+          <span id="countdownText">--</span>
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="log-section">
+        <h3>Activity Log</h3>
+        <div class="log-container" id="logContainer">
+          <div class="log-entry">Ready to start...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

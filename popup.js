@@ -67,7 +67,7 @@ async function loadSettings() {
     targetCountInput.value = settings.targetCount || 20;
     waitMinInput.value = settings.waitMin || 15;
     waitMaxInput.value = settings.waitMax || 30;
-    navigationMethodSelect.value = settings.navigationMethod || 'CLICK_DOWN';
+    navigationMethodSelect.value = settings.navigationMethod || 'RANDOM';
     skipAlreadyLikedCheckbox.checked = settings.skipAlreadyLiked !== false;
   }
 }

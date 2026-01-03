@@ -342,7 +342,14 @@ async function likeCurrentVideo(tabId) {
 
 // Navigate to next video
 async function navigateToNext(tabId) {
-  const method = runState.settings.navigationMethod;
+  let method = runState.settings.navigationMethod;
+
+  // If RANDOM, pick a random method
+  if (method === 'RANDOM') {
+    const methods = ['CLICK_DOWN', 'KEYBOARD_ARROW', 'WHEEL_SCROLL'];
+    method = methods[Math.floor(Math.random() * methods.length)];
+    console.log('Random navigation method selected:', method);
+  }
 
   try {
     const response = await chrome.tabs.sendMessage(tabId, {

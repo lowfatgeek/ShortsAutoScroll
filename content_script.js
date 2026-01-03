@@ -43,6 +43,49 @@ function debugLog(message, data = null) {
   }
 }
 
+// SPOOF VISIBILITY API
+// We inject a script into the main page context to overwrite the Visibility API
+function injectVisibilitySpoofer() {
+  const script = document.createElement('script');
+  script.textContent = `
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+    
+    // Capture and stop visibilitychange events
+    window.addEventListener('visibilitychange', (e) => {
+      e.stopImmediatePropagation();
+    }, true);
+    
+    console.log('[Shorts Auto Scroller] Visibility API spoofer activated');
+  `;
+  (document.head || document.documentElement).appendChild(script);
+  script.remove();
+}
+
+// VIDEO KEEP-ALIVE
+// Periodically check if video is paused and force play it
+// (YouTube auto-pauses videos in background tabs)
+let keepAliveInterval = null;
+
+function startVideoKeepAlive() {
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+
+  keepAliveInterval = setInterval(() => {
+    const video = document.querySelector('video');
+    if (video && video.paused && !video.ended) {
+      // Only force play if we are supposed to be "watching"
+      // (This logic could be refined if we knew for sure the extension was active, 
+      // but keeping the current video playing is generally safe/desired behavior for this extension)
+      console.log('Keep-alive: Forcing video play');
+      video.play().catch(e => console.log('Keep-alive play failed:', e));
+    }
+  }, 1000);
+}
+
+// Inject immediately
+injectVisibilitySpoofer();
+startVideoKeepAlive();
+
 // Check if page is ready and is a valid Shorts page
 function handleCheckReady(sendResponse) {
   try {

@@ -507,9 +507,10 @@ async function navigateToNext(tabId, forcedMethod = null) {
     runState.navigationRetries++;
 
     if (runState.navigationRetries < 2) {
-      // SMART FALLBACK: If first method failed, force SCROLL on retry
-      // This helps when Keyboard events are blocked in background
-      const retryMethod = 'WHEEL_SCROLL';
+      // SMART FALLBACK: If first method failed, force CLICK_DOWN on retry
+      // Click events are often prioritized over scroll in background
+      // If the button is missing, content script will fall back to scroll anyway
+      const retryMethod = 'CLICK_DOWN';
       addLog(`Retrying with ${retryMethod}...`);
       return navigateToNext(tabId, retryMethod);
     } else {

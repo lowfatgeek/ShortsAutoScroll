@@ -72,29 +72,102 @@ function injectVisibilitySpoofer() {
   script.remove();
 }
 
-// VIDEO KEEP-ALIVE
-// Periodically check if video is paused and force play it
-// (YouTube auto-pauses videos in background tabs)
+// VIDEO KEEP-ALIVE & ANTI-THROTTLE
+// Periodically check video and force layout updates to prevent background freezing
 let keepAliveInterval = null;
 
 function startVideoKeepAlive() {
   if (keepAliveInterval) clearInterval(keepAliveInterval);
 
   keepAliveInterval = setInterval(() => {
+    // 1. Keep video playing
     const video = document.querySelector('video');
     if (video && video.paused && !video.ended) {
-      // Only force play if we are supposed to be "watching"
-      // (This logic could be refined if we knew for sure the extension was active, 
-      // but keeping the current video playing is generally safe/desired behavior for this extension)
       console.log('Keep-alive: Forcing video play');
       video.play().catch(e => console.log('Keep-alive play failed:', e));
     }
+
+    // 2. FORCE LAYOUT REFLOW (Anti-Throttle)
+    // Accessing offsetHeight forces the browser to recalculate styles,
+    // preventing it from optimizing away the background tab's rendering loop.
+    // This is crucial when the extension is in a background window.
+    const forceReflow = document.body.offsetHeight;
+
+    // 3. Small invisible DOM mutation
+    // Triggers the mutation observer pipeline, keeping the thread active
+    let pixel = document.getElementById('anti-throttle-pixel');
+    if (!pixel) {
+      pixel = document.createElement('div');
+      pixel.id = 'anti-throttle-pixel';
+      pixel.style.position = 'absolute';
+      pixel.style.top = '0';
+      pixel.style.left = '0';
+      pixel.style.width = '1px';
+      pixel.style.height = '1px';
+      pixel.style.opacity = '0.01';
+      pixel.style.pointerEvents = 'none';
+      document.body.appendChild(pixel);
+    }
+    // Toggle content to force paint
+    pixel.textContent = pixel.textContent === '.' ? '..' : '.';
+
   }, 1000);
+}
+
+// AUDIO KEEP-ALIVE (The "Nuclear Option")
+// Plays a silent sound to force the browser to treat this tab as a high-priority media page
+// This prevents cross-profile background freezing.
+function enableAudioKeepAlive() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+
+    const audioCtx = new AudioContext();
+
+    // Create an oscillator (generates sound)
+    const oscillator = audioCtx.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // 440Hz
+
+    // Create a gain node (volume control)
+    const gainNode = audioCtx.createGain();
+    // Set volume to almost zero but not exactly zero (some browsers optimize away 0)
+    gainNode.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+
+    // Connect oscillator -> gain -> destination (speakers)
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    // Start immediately
+    oscillator.start();
+
+    // Prevent garbage collection
+    window._keepAliveAudio = { ctx: audioCtx, osc: oscillator, gain: gainNode };
+
+    console.log('[Shorts Auto Scroller] Audio Keep-Alive Active (Silent Oscillator)');
+
+    // Resume context if suspended (browser autoplay policy)
+    if (audioCtx.state === 'suspended') {
+      const resume = () => {
+        audioCtx.resume();
+        document.removeEventListener('click', resume);
+        document.removeEventListener('keydown', resume);
+        document.removeEventListener('scroll', resume);
+      };
+
+      document.addEventListener('click', resume);
+      document.addEventListener('keydown', resume);
+      document.addEventListener('scroll', resume);
+    }
+  } catch (e) {
+    console.error('Audio Keep-Alive failed:', e);
+  }
 }
 
 // Inject immediately
 injectVisibilitySpoofer();
 startVideoKeepAlive();
+enableAudioKeepAlive();
 
 // Check if page is ready and is a valid Shorts page
 function handleCheckReady(sendResponse) {

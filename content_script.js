@@ -331,41 +331,60 @@ function handleCheckSponsored(sendResponse) {
 
 // Check if current video is sponsored/ad
 function checkIfSponsored() {
-  // Look for "Sponsored" text in various locations
-  const sponsoredSelectors = [
-    // Common sponsored indicators
-    '[class*="badge"]',
-    '[class*="sponsor"]',
-    '[class*="ad-badge"]',
-    '.ytd-ad-slot-renderer',
-    '#player-overlay',
-    '.ytp-ad-module',
-    '#shorts-player'
+  // Only check within the shorts player overlay area - not the entire page
+  const shortsContainers = [
+    '#shorts-player',
+    'ytd-reel-video-renderer[is-active]',
+    '.reel-player-overlay-renderer',
+    'ytd-shorts',
+    '#player-container'
   ];
 
-  // Check text content for "Sponsored"
-  const pageText = document.body.innerText;
-  if (pageText.includes('Sponsored')) {
-    console.log('Found "Sponsored" text on page');
-    return true;
-  }
+  for (const selector of shortsContainers) {
+    const container = document.querySelector(selector);
+    if (!container) continue;
 
-  // Check specific elements that might contain sponsored indicator
-  for (const selector of sponsoredSelectors) {
-    const elements = document.querySelectorAll(selector);
-    for (const el of elements) {
-      if (el.textContent && el.textContent.includes('Sponsored')) {
-        console.log('Found "Sponsored" in element:', selector);
-        return true;
+    // Look for sponsored badge/label elements within the container
+    // The sponsored text appears in a badge near channel info
+    const badgeSelectors = [
+      '[class*="badge"]',
+      '[class*="sponsor"]',
+      '.ytd-channel-name',
+      '.reel-player-header-renderer',
+      '.metadata-container',
+      '[class*="channel"]',
+      '[class*="meta"]'
+    ];
+
+    for (const badgeSelector of badgeSelectors) {
+      const badges = container.querySelectorAll(badgeSelector);
+      for (const badge of badges) {
+        const text = badge.textContent || '';
+        // Check for exact "Sponsored" word (not just containing it)
+        if (/\bSponsored\b/i.test(text)) {
+          console.log('Found "Sponsored" badge in:', selector, badgeSelector);
+          return true;
+        }
       }
     }
   }
 
-  // Check for ad overlay or ad player elements
-  const adIndicators = document.querySelectorAll('.ytp-ad-player-overlay, .ytp-ad-text, .ad-showing');
-  if (adIndicators.length > 0) {
-    console.log('Found ad indicator elements');
-    return true;
+  // Check for YouTube ad-specific elements
+  const adElements = document.querySelectorAll(
+    'ytd-ad-slot-renderer, ' +
+    'ytd-promoted-sparkles-web-renderer, ' +
+    '.ytp-ad-overlay-container, ' +
+    '.ytp-ad-player-overlay-instream-info'
+  );
+  
+  if (adElements.length > 0) {
+    // Verify the ad element is within or near the current shorts player
+    for (const adEl of adElements) {
+      if (adEl.offsetParent !== null) { // Check if visible
+        console.log('Found visible ad element');
+        return true;
+      }
+    }
   }
 
   return false;

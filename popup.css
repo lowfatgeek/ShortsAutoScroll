@@ -320,6 +320,16 @@ header h1 {
   margin-bottom: 4px;
 }
 
+.footer-credit a {
+  color: #FF0000;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer-credit a:hover {
+  text-decoration: underline;
+}
+
 .footer-version {
   font-size: 11px;
   color: #adb5bd;

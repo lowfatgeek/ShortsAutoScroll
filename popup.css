@@ -197,6 +197,15 @@ header h1 {
   background-color: #c82333;
 }
 
+.btn-reset {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-reset:not(:disabled):hover {
+  background-color: #5a6268;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -66,6 +66,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
       break;
 
+    case 'RESET_EXTENSION':
+      handleResetExtension();
+      sendResponse({ ok: true });
+      break;
+
     case 'GET_STATUS':
       sendResponse({ runState });
       break;
@@ -109,6 +114,30 @@ async function handleStopRun() {
   
   addLog('⊗ Stopped by user');
   await saveState();
+}
+
+// Handle reset extension command
+async function handleResetExtension() {
+  console.log('Resetting extension');
+  
+  // Clear all alarms
+  await chrome.alarms.clearAll();
+  
+  // Reset state to defaults
+  runState = {
+    isRunning: false,
+    currentCount: 0,
+    targetCount: 0,
+    countdown: 0,
+    lastVideoId: null,
+    lastLogs: [],
+    settings: runState.settings, // Preserve user settings
+    currentStep: null,
+    navigationRetries: 0
+  };
+  
+  await saveState();
+  console.log('Extension reset complete');
 }
 
 // Start automation loop

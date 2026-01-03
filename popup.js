@@ -12,6 +12,7 @@ const navigationMethodSelect = document.getElementById('navigationMethod');
 const skipAlreadyLikedCheckbox = document.getElementById('skipAlreadyLiked');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const resetBtn = document.getElementById('resetBtn');
 const progressText = document.getElementById('progressText');
 const countdownText = document.getElementById('countdownText');
 const logContainer = document.getElementById('logContainer');
@@ -96,6 +97,7 @@ function setupEventListeners() {
   // Control buttons
   startBtn.addEventListener('click', handleStart);
   stopBtn.addEventListener('click', handleStop);
+  resetBtn.addEventListener('click', handleReset);
 }
 
 // Check if current tab is YouTube Shorts
@@ -241,6 +243,44 @@ async function handleStop() {
   } catch (error) {
     console.error('Error stopping:', error);
     addLog('Failed to stop: ' + error.message, 'error');
+  }
+}
+
+// Handle reset button click
+async function handleReset() {
+  try {
+    // Stop any running automation
+    await chrome.runtime.sendMessage({ type: 'RESET_EXTENSION' });
+    
+    // Clear logs in UI
+    logContainer.innerHTML = '<div class="log-entry">Extension reset. Ready to start...</div>';
+    
+    // Reset progress display
+    progressText.textContent = '0 / 20';
+    countdownText.textContent = '--';
+    
+    // Re-inject content script and re-detect
+    if (currentTab && currentTab.id) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          files: ['content_script.js']
+        });
+        
+        // Wait a moment for script to initialize
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (injectError) {
+        console.log('Could not inject content script:', injectError);
+      }
+    }
+    
+    // Re-run detection
+    await checkDetection();
+    
+    addLog('Extension reset complete', 'info');
+  } catch (error) {
+    console.error('Error resetting:', error);
+    addLog('Failed to reset: ' + error.message, 'error');
   }
 }
 

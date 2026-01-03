@@ -32,6 +32,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Debug logger
+function debugLog(message, data = null) {
+  const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+  const prefix = `[${timestamp}] [CS]`;
+  if (data) {
+    console.log(`${prefix} ${message}`, data);
+  } else {
+    console.log(`${prefix} ${message}`);
+  }
+}
+
 // Check if page is ready and is a valid Shorts page
 function handleCheckReady(sendResponse) {
   try {
@@ -40,6 +51,8 @@ function handleCheckReady(sendResponse) {
     const hasLikeButton = findLikeButton() !== null;
 
     const ready = isShorts && hasVideo;
+
+    debugLog('Check Ready:', { isShorts, hasVideo, hasLikeButton, ready });
 
     sendResponse({
       ready: ready,
@@ -87,6 +100,7 @@ async function likeCurrentVideo(retryCount = 0) {
 
   // Find like button
   const likeButton = findLikeButton();
+  debugLog('Like button found:', !!likeButton);
 
   if (!likeButton) {
     if (retryCount < maxRetries) {
@@ -121,7 +135,7 @@ async function likeCurrentVideo(retryCount = 0) {
 function findLikeButton() {
   // Strategy 1: Find by aria-label containing "like"
   const buttons = document.querySelectorAll('button[aria-label]');
-  
+
   for (const button of buttons) {
     const label = button.getAttribute('aria-label');
     if (label && label.toLowerCase().includes('like') && !label.toLowerCase().includes('dislike')) {
@@ -140,6 +154,8 @@ function findLikeButton() {
     '#actions-inner-container'
   ];
 
+  debugLog('Finding like button in containers...');
+
   for (const selector of containers) {
     const container = document.querySelector(selector);
     if (container) {
@@ -156,13 +172,13 @@ function findLikeButton() {
 // Check if element is visible
 function isElementVisible(element) {
   if (!element) return false;
-  
+
   const style = window.getComputedStyle(element);
-  return style.display !== 'none' && 
-         style.visibility !== 'hidden' && 
-         style.opacity !== '0' &&
-         element.offsetWidth > 0 &&
-         element.offsetHeight > 0;
+  return style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.opacity !== '0' &&
+    element.offsetWidth > 0 &&
+    element.offsetHeight > 0;
 }
 
 // Handle navigation to next video
@@ -185,7 +201,7 @@ async function navigateToNext(method, currentVideoId, retryCount = 0) {
 
   // Execute navigation method
   let success = false;
-  
+
   switch (method) {
     case 'CLICK_DOWN':
       success = await navigateByClickDown();
@@ -210,7 +226,7 @@ async function navigateToNext(method, currentVideoId, retryCount = 0) {
 
   // Verify video changed
   const newVideoId = extractVideoId();
-  
+
   if (newVideoId && newVideoId !== currentVideoId) {
     console.log(`Navigation successful: ${currentVideoId} -> ${newVideoId}`);
     return { ok: true, newVideoId: newVideoId };
@@ -376,7 +392,7 @@ function checkIfSponsored() {
     '.ytp-ad-overlay-container, ' +
     '.ytp-ad-player-overlay-instream-info'
   );
-  
+
   if (adElements.length > 0) {
     // Verify the ad element is within or near the current shorts player
     for (const adEl of adElements) {

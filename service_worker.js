@@ -14,20 +14,31 @@ let runState = {
   navigationRetries: 0
 };
 
+// Debug logger
+function debugLog(message, data = null) {
+  const timestamp = new Date().toISOString().split('T')[1].slice(0, -1); // HH:MM:SS.mmm
+  const prefix = `[${timestamp}] [SW]`;
+  if (data) {
+    console.log(`${prefix} ${message}`, data);
+  } else {
+    console.log(`${prefix} ${message}`);
+  }
+}
+
 // Initialize state from storage on startup
 async function initializeState() {
   const stored = await chrome.storage.local.get(['runState', 'settings']);
-  
+
   if (stored.runState) {
     runState = { ...runState, ...stored.runState };
-    
+
     // If was running, restore the automation
     if (runState.isRunning) {
       console.log('Restoring automation state...');
       await saveState();
     }
   }
-  
+
   if (stored.settings) {
     runState.settings = stored.settings;
   }
@@ -42,12 +53,12 @@ async function saveState() {
 function addLog(message) {
   console.log('Log:', message);
   runState.lastLogs.unshift(message);
-  
+
   // Keep only last 10 logs
   if (runState.lastLogs.length > 10) {
     runState.lastLogs = runState.lastLogs.slice(0, 10);
   }
-  
+
   saveState();
 }
 
@@ -94,7 +105,7 @@ async function handleStartRun(settings) {
   runState.lastVideoId = null;
   runState.navigationRetries = 0;
   runState.lastLogs = [];
-  
+
   addLog(`Starting automation: ${settings.targetCount} videos`);
   await saveState();
 
@@ -103,26 +114,34 @@ async function handleStartRun(settings) {
 }
 
 // Handle stop run command
-async function handleStopRun() {
-  console.log('Stopping run');
-  
+async function handleStopRun(reason = 'user') {
+  console.log('Stopping run, reason:', reason);
+
   runState.isRunning = false;
   runState.countdown = 0;
-  
+
   // Clear all alarms
   await chrome.alarms.clearAll();
-  
-  addLog('⊗ Stopped by user');
+
+  if (reason === 'user') {
+    addLog('⊗ Stopped by user');
+  } else if (reason === 'completed') {
+    // Already logged completion
+  } else {
+    // For errors, the error log was likely already added
+    addLog('⊗ Stopped due to error');
+  }
+
   await saveState();
 }
 
 // Handle reset extension command
 async function handleResetExtension() {
   console.log('Resetting extension');
-  
+
   // Clear all alarms
   await chrome.alarms.clearAll();
-  
+
   // Reset state to defaults
   runState = {
     isRunning: false,
@@ -135,7 +154,7 @@ async function handleResetExtension() {
     currentStep: null,
     navigationRetries: 0
   };
-  
+
   await saveState();
   console.log('Extension reset complete');
 }
@@ -146,11 +165,13 @@ async function startAutomationLoop() {
 
   try {
     // Step A: Verify content script is ready
+    debugLog('Step A: Verifying content script ready...');
     const ready = await verifyReady();
-    
+    debugLog('Step A result:', { ready });
+
     if (!ready) {
       addLog('Error: Content script not ready');
-      await handleStopRun();
+      await handleStopRun('error');
       return;
     }
 
@@ -159,15 +180,39 @@ async function startAutomationLoop() {
   } catch (error) {
     console.error('Error in automation loop:', error);
     addLog(`Error: ${error.message}`);
-    await handleStopRun();
+    await handleStopRun('error');
   }
+}
+
+// Helper: Find the active YouTube Shorts tab
+async function findActiveTab() {
+  // Strategy 1: Last focused window
+  let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+
+  if (tab && tab.url && tab.url.includes('youtube.com/shorts/')) {
+    debugLog('findActiveTab: Found in last focused window', tab.id);
+    return tab;
+  }
+
+  // Strategy 2: Search specifically for active Shorts tabs in any window
+  const tabs = await chrome.tabs.query({ url: '*://www.youtube.com/shorts/*' });
+  const activeShortsTab = tabs.find(t => t.active);
+
+  if (activeShortsTab) {
+    debugLog('findActiveTab: Found valid Shorts tab via URL search', activeShortsTab.id);
+    return activeShortsTab;
+  }
+
+  debugLog('findActiveTab: No valid tab found');
+  return null;
 }
 
 // Verify content script is ready
 async function verifyReady() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+    const tab = await findActiveTab();
+    debugLog('verifyReady: Active tab found:', tab ? { id: tab.id, url: tab.url, status: tab.status } : 'None');
+
     if (!tab || !tab.id) {
       console.error('No active tab found');
       return false;
@@ -182,8 +227,10 @@ async function verifyReady() {
     // Try to send message to content script
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'CHECK_READY' });
+      debugLog('verifyReady: Response from content script:', response);
       return response && response.ready;
     } catch (error) {
+      debugLog('verifyReady: Content script check failed, error:', error.message);
       // Content script not loaded - try to inject it
       console.log('Content script not responding, attempting to inject...');
       return await injectContentScript(tab.id);
@@ -201,12 +248,12 @@ async function injectContentScript(tabId) {
       target: { tabId: tabId },
       files: ['content_script.js']
     });
-    
+
     console.log('Content script injected successfully');
-    
+
     // Wait a moment for the script to initialize
     await sleep(500);
-    
+
     // Try to verify again
     const response = await chrome.tabs.sendMessage(tabId, { type: 'CHECK_READY' });
     return response && response.ready;
@@ -218,17 +265,21 @@ async function injectContentScript(tabId) {
 
 // Process next video in the sequence
 async function processNextVideo() {
+  debugLog('Processing next video. Count:', `${runState.currentCount}/${runState.targetCount}`);
   if (!runState.isRunning) return;
 
   // Check if we've reached the target
   if (runState.currentCount >= runState.targetCount) {
     addLog(`✓ Completed ${runState.targetCount} videos`);
-    await handleStopRun();
+    await handleStopRun('completed');
     return;
   }
 
   // Check if current video is sponsored - skip immediately if so
   const isSponsored = await checkIfSponsored();
+  // Log the result of sponsored check
+  console.log('Sponsored check result:', isSponsored);
+
   if (isSponsored) {
     addLog('⊘ Sponsored video detected, skipping...');
     await skipToNextVideo();
@@ -236,14 +287,15 @@ async function processNextVideo() {
   }
 
   // Step B: Wait countdown (only for non-sponsored videos)
+  debugLog('Step B: Starting countdown');
   await startCountdown();
 }
 
 // Check if current video is sponsored
 async function checkIfSponsored() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+    const tab = await findActiveTab();
+
     if (!tab || !tab.id) {
       return false;
     }
@@ -261,11 +313,11 @@ async function skipToNextVideo() {
   if (!runState.isRunning) return;
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+    const tab = await findActiveTab();
+
     if (!tab || !tab.id) {
       addLog('Error: Tab not found');
-      await handleStopRun();
+      await handleStopRun('error');
       return;
     }
 
@@ -274,7 +326,7 @@ async function skipToNextVideo() {
 
     if (!navSuccess) {
       addLog('Navigation failed after retries');
-      await handleStopRun();
+      await handleStopRun('error');
       return;
     }
 
@@ -287,7 +339,7 @@ async function skipToNextVideo() {
   } catch (error) {
     console.error('Error skipping sponsored video:', error);
     addLog(`Error: ${error.message}`);
-    await handleStopRun();
+    await handleStopRun('error');
   }
 }
 
@@ -299,10 +351,11 @@ async function startCountdown() {
   const waitMin = runState.settings.waitMin;
   const waitMax = runState.settings.waitMax;
   const randomWait = randomInt(waitMin, waitMax);
-  
+
   runState.countdown = randomWait;
   await saveState();
 
+  debugLog(`Countdown started: ${randomWait}s`);
   console.log(`Starting countdown: ${randomWait} seconds`);
 
   // Create alarm for countdown
@@ -340,14 +393,15 @@ async function handleCountdownTick() {
 
 // Execute actions on current video (like + navigate)
 async function executeVideoActions() {
+  debugLog('Executing video actions');
   if (!runState.isRunning) return;
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+    const tab = await findActiveTab();
+
     if (!tab || !tab.id) {
       addLog('Error: Tab not found');
-      await handleStopRun();
+      await handleStopRun('error');
       return;
     }
 
@@ -362,7 +416,7 @@ async function executeVideoActions() {
 
     if (!navSuccess) {
       addLog('Navigation failed after retries');
-      await handleStopRun();
+      await handleStopRun('error');
       return;
     }
 
@@ -378,7 +432,7 @@ async function executeVideoActions() {
   } catch (error) {
     console.error('Error executing video actions:', error);
     addLog(`Error: ${error.message}`);
-    await handleStopRun();
+    await handleStopRun('error');
   }
 }
 
@@ -424,7 +478,7 @@ async function navigateToNext(tabId) {
     } else {
       // Navigation failed
       runState.navigationRetries++;
-      
+
       if (runState.navigationRetries < 2) {
         addLog('Navigation failed, retrying...');
         await sleep(2000);

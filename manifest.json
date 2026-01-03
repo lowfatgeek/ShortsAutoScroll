@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto Shorts Scroller & Liker",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Automate scrolling and liking YouTube Shorts videos with configurable settings and timing controls.",
   "permissions": [
     "storage",
@@ -27,8 +27,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/shorts/*"],
-      "js": ["content_script.js"],
+      "matches": [
+        "https://www.youtube.com/shorts/*"
+      ],
+      "js": [
+        "content_script.js"
+      ],
       "run_at": "document_idle"
     }
   ],

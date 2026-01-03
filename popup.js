@@ -16,6 +16,7 @@ const resetBtn = document.getElementById('resetBtn');
 const progressText = document.getElementById('progressText');
 const countdownText = document.getElementById('countdownText');
 const logContainer = document.getElementById('logContainer');
+const versionText = document.getElementById('versionText');
 
 // State
 let currentTab = null;
@@ -24,6 +25,10 @@ let statusUpdateInterval = null;
 
 // Initialize popup
 async function init() {
+  // Display version from manifest
+  const manifest = chrome.runtime.getManifest();
+  versionText.textContent = manifest.version;
+
   // Check if disclaimer was accepted
   const { disclaimerAccepted } = await chrome.storage.local.get('disclaimerAccepted');
   

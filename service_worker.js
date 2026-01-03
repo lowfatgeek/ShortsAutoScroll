@@ -446,7 +446,7 @@ async function likeCurrentVideo(tabId) {
     } else if (response.ok && !response.liked && response.reason === 'already-liked') {
       addLog(`Video #${runState.currentCount + 1}: Already liked, skipped`);
     } else {
-      addLog(`Video #${runState.currentCount + 1}: Like failed`);
+      addLog(`Video #${runState.currentCount + 1}: Like failed (${response.error || 'Unknown'})`);
     }
   } catch (error) {
     console.error('Error liking video:', error);

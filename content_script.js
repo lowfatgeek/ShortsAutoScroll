@@ -248,47 +248,61 @@ async function likeCurrentVideo(retryCount = 0) {
 
   // Click like button
   try {
-    likeButton.click();
-    console.log('Liked video successfully');
+    superClick(likeButton);
+    console.log('Liked video successfully (Super Click)');
     return { ok: true, liked: true };
   } catch (error) {
     console.error('Error clicking like button:', error);
-    return { ok: false, error: 'CLICK_FAILED' };
+    return { ok: false, error: 'CLICK_FAILED: ' + error.message };
   }
+}
+
+// SUPER CLICK: Force-feeds events to elements that browser thinks are non-interactive
+function superClick(element) {
+  const eventOptions = { bubbles: true, cancelable: true, view: window };
+  const mouseDown = new MouseEvent('mousedown', eventOptions);
+  const mouseUp = new MouseEvent('mouseup', eventOptions);
+  const click = new MouseEvent('click', eventOptions);
+
+  element.dispatchEvent(mouseDown);
+  element.dispatchEvent(mouseUp);
+  element.dispatchEvent(click);
 }
 
 // Find like button in the DOM
 function findLikeButton() {
-  // Strategy 1: Find by aria-label containing "like"
-  const buttons = document.querySelectorAll('button[aria-label]');
+  debugLog('Finding like button (First Button Strategy)...');
 
-  for (const button of buttons) {
-    const label = button.getAttribute('aria-label');
-    if (label && label.toLowerCase().includes('like') && !label.toLowerCase().includes('dislike')) {
-      // Make sure it's visible and in the Shorts action panel
-      if (isElementVisible(button)) {
-        return button;
+  // Strategy: The Like button is structurally the FIRST button in the action sidebar.
+  // We target the active video's action panel and grab the first button element.
+  const containerSelectors = [
+    'ytd-reel-video-renderer[is-active] #actions', // Best: Active video only
+    '#shorts-action-panel', // Legacy
+    '#actions' // Fallback (might pick up next/prev video's actions if not careful)
+  ];
+
+  for (const selector of containerSelectors) {
+    const container = document.querySelector(selector);
+    if (container) {
+      // Find the first button in this container
+      const btn = container.querySelector('button');
+      if (btn) {
+        // Verify it's not a "Share" or "Comment" button by accident?
+        // No, trusting the structure is safer for cross-language support right now.
+        return btn;
       }
     }
   }
 
-  // Strategy 2: Look for like button in Shorts-specific containers
-  const containers = [
-    '#actions',
-    '#shorts-action-panel',
-    '.ytd-shorts',
-    '#actions-inner-container'
-  ];
-
-  debugLog('Finding like button in containers...');
-
-  for (const selector of containers) {
-    const container = document.querySelector(selector);
-    if (container) {
-      const likeBtn = container.querySelector('button[aria-label*="like" i]');
-      if (likeBtn && isElementVisible(likeBtn)) {
-        return likeBtn;
-      }
+  // Fallback: Try searching for aria-label "like" or "suka" or generic
+  // (In case the structural assumption fails totally)
+  const buttons = document.querySelectorAll('button[aria-label]');
+  for (const button of buttons) {
+    const label = button.getAttribute('aria-label') || '';
+    if (label.toLowerCase().includes('like') || // English
+      label.toLowerCase().includes('suka') || // Indonesian
+      label.toLowerCase().includes('thumb')) { // Description
+      return button;
     }
   }
 
@@ -391,10 +405,12 @@ async function navigateByClickDown() {
 
   for (const selector of selectors) {
     const button = document.querySelector(selector);
-    if (button && isElementVisible(button)) {
+    // BLIND CLICK: We check if button exists, but skip visibility check
+    // because background tabs often report size 0 or hidden visibility.
+    if (button) {
       try {
-        button.click();
-        console.log('Clicked down navigation button');
+        superClick(button);
+        console.log('Clicked down navigation button (Super Click)');
         return true;
       } catch (error) {
         console.error('Error clicking navigation button:', error);
@@ -432,7 +448,14 @@ async function navigateByKeyboard() {
 async function navigateByScroll() {
   try {
     console.log('Attempting scroll navigation...');
-    const windowH = window.innerHeight;
+
+    // BLIND SCROLL fallback
+    // If window height is reported as 0 (background tab), default to 800px
+    let windowH = window.innerHeight;
+    if (windowH < 100) {
+      console.log('Window height suspiciously small, using default 800px');
+      windowH = 800;
+    }
 
     // Strategy 1: Window scroll (standard)
     window.scrollBy({
